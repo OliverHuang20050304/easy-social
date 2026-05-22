@@ -2,12 +2,25 @@ from __future__ import annotations
 
 import pytest
 
+from easy_social.captcha import SESSION_CHALLENGE_KEY, get_store
 from easy_social.extensions import db
 from easy_social.models import User
 
 from conftest import captcha_answer_for_session, register
 
 pytestmark = pytest.mark.integration
+
+
+def test_captcha_answer_not_stored_in_flask_session(client, app):
+    client.get("/auth/register")
+
+    with client.session_transaction() as flask_session:
+        assert "captcha_answer" not in flask_session
+        challenge_id = flask_session.get(SESSION_CHALLENGE_KEY)
+
+    assert challenge_id
+    with app.app_context():
+        assert get_store()._answers.get(challenge_id) is not None
 
 
 def test_register_page_shows_captcha_question(client):
@@ -35,6 +48,7 @@ def test_register_fails_when_captcha_missing(client, app):
             "username": "alice",
             "email": "alice@example.com",
             "password": "password",
+            "captcha_answer": "",
         },
         follow_redirects=True,
     )

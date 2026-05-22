@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from flask import Flask
 from sqlalchemy.pool import NullPool
 
+from .captcha import CaptchaStore, CONFIG_STORE_KEY
 from .extensions import db, login_manager, migrate
 from .media import media_url
 from .models import User
@@ -88,6 +89,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     if app.config["MEDIA_STORAGE_BACKEND"] == "local":
         Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
+
+    app.config.setdefault(CONFIG_STORE_KEY, CaptchaStore())
 
     db.init_app(app)
     migrate.init_app(app, db)

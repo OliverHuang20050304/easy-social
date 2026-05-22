@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import re
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from easy_social import create_app
-from easy_social.captcha import SESSION_ANSWER_KEY
+from easy_social.captcha import SESSION_CHALLENGE_KEY
 from easy_social.extensions import db
+
+CAPTCHA_QUESTION_RE = re.compile(
+    rb'<span class="captcha-question">(\d+) \+ (\d+) = \?</span>'
+)
 
 
 @pytest.fixture()
@@ -34,12 +39,19 @@ def client(app):
 
 
 def captcha_answer_for_session(client) -> str:
-    client.get("/auth/register")
-    with client.session_transaction() as session:
-        answer = session.get(SESSION_ANSWER_KEY)
-    if answer is None:
-        raise RuntimeError("CAPTCHA answer was not stored in the session.")
-    return str(answer)
+    response = client.get("/auth/register")
+    with client.session_transaction() as flask_session:
+        if "captcha_answer" in flask_session:
+            raise RuntimeError("CAPTCHA answer must not be stored in the Flask session.")
+        if SESSION_CHALLENGE_KEY not in flask_session:
+            raise RuntimeError("CAPTCHA challenge id was not stored in the session.")
+
+    match = CAPTCHA_QUESTION_RE.search(response.data)
+    if not match:
+        raise RuntimeError("CAPTCHA question was not found on the register page.")
+
+    left, right = int(match.group(1)), int(match.group(2))
+    return str(left + right)
 
 
 def register(
@@ -54,7 +66,11 @@ def register(
         "username": username,
         "email": email or f"{username}@example.com",
         "password": password,
-        "captcha_answer": captcha_answer or captcha_answer_for_session(client),
+        "captcha_answer": (
+            captcha_answer
+            if captcha_answer is not None
+            else captcha_answer_for_session(client)
+        ),
     }
     return client.post("/auth/register", data=data, follow_redirects=True)
 
