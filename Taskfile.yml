@@ -3,67 +3,74 @@ version: "3"
 vars:
   FLASK_APP: easy_social
   PORT: 5000
+  RUNNER: uv run
 
 tasks:
   install:
-    desc: Install project dependencies with Poetry
+    desc: Install project dependencies (uv sync; Poetry if it works)
     cmds:
-      - poetry install --with dev --no-interaction
+      - |
+        if poetry run python -c "pass" >/dev/null 2>&1; then
+          poetry install --with dev --no-interaction
+        else
+          uv sync
+          uv pip install pytest selenium
+        fi
 
   init-db:
     desc: Initialize the local SQLite database
     cmds:
-      - poetry run flask --app {{.FLASK_APP}} init-db
+      - "{{.RUNNER}} flask --app {{.FLASK_APP}} init-db"
 
   import-fake-data:
     desc: Import fake seed data into the configured database
     cmds:
-      - poetry run python scripts/import_fake_data.py
+      - "{{.RUNNER}} python scripts/import_fake_data.py"
 
   setup-supabase:
     desc: Initialize Supabase tables and Storage bucket
     cmds:
-      - poetry run python scripts/setup_supabase.py
+      - "{{.RUNNER}} python scripts/setup_supabase.py"
 
   run:
     desc: Run the Flask development server
     cmds:
-      - poetry run flask --app {{.FLASK_APP}} run --port {{.PORT}}
+      - "{{.RUNNER}} flask --app {{.FLASK_APP}} run --port {{.PORT}}"
 
   test:
     desc: Run the test suite
     cmds:
-      - poetry run pytest
+      - "{{.RUNNER}} pytest"
 
   test-unit:
     desc: Run focused unit tests
     cmds:
-      - poetry run pytest -m unit
+      - "{{.RUNNER}} pytest -m unit"
 
   test-integration:
     desc: Run Flask integration tests
     cmds:
-      - poetry run pytest -m integration
+      - "{{.RUNNER}} pytest -m integration"
 
   test-ui:
     desc: Run Selenium UI tests
     cmds:
-      - poetry run pytest -m ui
+      - "{{.RUNNER}} pytest -m ui"
 
   test-supabase-connection:
     desc: Test Supabase Postgres and Storage with local .env credentials
     cmds:
-      - poetry run python scripts/check_supabase_connection.py
+      - "{{.RUNNER}} python scripts/check_supabase_connection.py"
 
   shell:
-    desc: Open a Poetry shell
+    desc: Open a shell in the project virtual environment
     cmds:
-      - poetry shell
+      - uv shell
 
   routes:
     desc: Show Flask routes
     cmds:
-      - poetry run flask --app {{.FLASK_APP}} routes
+      - "{{.RUNNER}} flask --app {{.FLASK_APP}} routes"
 
   clean:
     desc: Remove local Python caches and pytest cache
