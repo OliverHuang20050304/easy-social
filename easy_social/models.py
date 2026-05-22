@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 
 from flask_login import UserMixin
 from sqlalchemy import CheckConstraint, UniqueConstraint
@@ -100,6 +101,51 @@ class Post(db.Model):
     @property
     def is_repost(self) -> bool:
         return self.repost_of_id is not None
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+class CaptchaChallenge(db.Model):
+    __tablename__ = "captcha_challenge"
+
+    challenge_id = db.Column(db.String(64), primary_key=True)
+    answer = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=_utc_now_naive,
+    )
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+
+    @property
+    def is_expired(self) -> bool:
+        return _utc_now_naive() >= _as_utc_naive(self.expires_at)
+
+    @classmethod
+    def create_challenge(
+        cls,
+        answer: int,
+        *,
+        ttl: timedelta | None = None,
+    ) -> CaptchaChallenge:
+        now = _utc_now_naive()
+        challenge = cls(
+            challenge_id=secrets.token_urlsafe(16),
+            answer=answer,
+            created_at=now,
+            expires_at=now + (ttl or timedelta(minutes=5)),
+        )
+        db.session.add(challenge)
+        db.session.commit()
+        return challenge
 
 
 class Comment(db.Model):
