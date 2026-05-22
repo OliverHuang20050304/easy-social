@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import threading
 from pathlib import Path
@@ -120,7 +121,14 @@ def submit_form(browser, form):
     browser.execute_script("arguments[0].requestSubmit ? arguments[0].requestSubmit() : arguments[0].submit();", form)
 
 
-def register_via_ui(browser, live_server: str, username: str):
+def captcha_answer_from_question(question: str) -> str:
+    match = re.fullmatch(r"(\d+) \+ (\d+) = \?", question.strip())
+    if not match:
+        raise ValueError(f"Unexpected CAPTCHA question format: {question!r}")
+    return str(int(match.group(1)) + int(match.group(2)))
+
+
+def register_via_ui(browser, live_server: str, username: str, *, captcha_answer: str | None = None):
     browser.get(f"{live_server}/auth/register")
     form = WebDriverWait(browser, 10).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "form.form-stack"))
@@ -128,6 +136,10 @@ def register_via_ui(browser, live_server: str, username: str):
     set_field_value(browser, form.find_element(By.NAME, "username"), username)
     set_field_value(browser, form.find_element(By.NAME, "email"), f"{username}@example.com")
     set_field_value(browser, form.find_element(By.NAME, "password"), "password")
+    if captcha_answer is None:
+        question = form.find_element(By.CSS_SELECTOR, ".captcha-question").text
+        captcha_answer = captcha_answer_from_question(question)
+    set_field_value(browser, form.find_element(By.NAME, "captcha_answer"), captcha_answer)
     submit_form(browser, form)
     wait_for_feed(browser)
 
@@ -170,6 +182,22 @@ def test_composer_shows_media_preview_before_posting(
     preview.find_element(By.CSS_SELECTOR, "[data-media-preview-clear]").click()
     WebDriverWait(browser, 5).until(lambda _: not preview.is_displayed())
     assert media_input.get_attribute("value") == ""
+
+
+@pytest.mark.ui
+def test_register_requires_valid_captcha(browser, live_server):
+    browser.get(f"{live_server}/auth/register")
+    form = WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "form.form-stack"))
+    )
+    set_field_value(browser, form.find_element(By.NAME, "username"), "captcha-user")
+    set_field_value(browser, form.find_element(By.NAME, "email"), "captcha-user@example.com")
+    set_field_value(browser, form.find_element(By.NAME, "password"), "password")
+    set_field_value(browser, form.find_element(By.NAME, "captcha_answer"), "99999")
+    submit_form(browser, form)
+
+    wait_for_text(browser, "CAPTCHA answer is incorrect. Please try again.")
+    assert "Create account" in browser.find_element(By.TAG_NAME, "body").text
 
 
 @pytest.mark.ui
