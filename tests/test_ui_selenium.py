@@ -11,7 +11,7 @@ from werkzeug.serving import make_server
 
 from easy_social import create_app
 from easy_social.extensions import db
-from easy_social.models import Comment, Post, User
+from easy_social.models import Comment, PollOption, PollVote, Post, User
 
 selenium = pytest.importorskip("selenium")
 
@@ -86,6 +86,8 @@ def browser():
 def clean_database(ui_app):
     with ui_app.app_context():
         db.session.query(Comment).delete()
+        db.session.query(PollVote).delete()
+        db.session.query(PollOption).delete()
         db.session.query(Post).delete()
         db.session.query(User).delete()
         db.session.commit()
@@ -216,6 +218,26 @@ def test_user_can_register_create_post_and_comment(browser, live_server):
     set_field_value(browser, comment_form.find_element(By.NAME, "body"), "First UI comment")
     submit_form(browser, comment_form)
     wait_for_text(browser, "First UI comment")
+
+
+@pytest.mark.ui
+def test_user_can_create_poll_and_vote_from_ui(browser, live_server):
+    register_via_ui(browser, live_server, "poll-author")
+    composer = browser.find_element(By.CSS_SELECTOR, "form.composer")
+    browser.find_element(By.CSS_SELECTOR, "[data-poll-toggle]").click()
+    poll_options = composer.find_elements(By.NAME, "poll_options")
+    set_field_value(browser, composer.find_element(By.NAME, "body"), "Best pet?")
+    set_field_value(browser, poll_options[0], "Cats")
+    set_field_value(browser, poll_options[1], "Dogs")
+    submit_form(browser, composer)
+    wait_for_text(browser, "Best pet?")
+
+    vote_form = browser.find_element(By.CSS_SELECTOR, ".poll-vote-form")
+    vote_form.find_element(By.CSS_SELECTOR, "input[type='radio']").click()
+    submit_form(browser, vote_form)
+
+    wait_for_text(browser, "1 votes (100.0%)")
+    assert "Your vote" in browser.find_element(By.TAG_NAME, "body").text
 
 
 @pytest.mark.ui

@@ -1,4 +1,5 @@
 {% set content = post.display_post %}
+{% set poll = poll_views[content.id] if poll_views is defined and content.id in poll_views else none %}
 <article class="post">
   {% if post.is_repost %}
     <div class="repost-label">Reposted by <a href="{{ url_for('social.profile', username=post.author.username) }}">@{{ post.author.username }}</a></div>
@@ -7,10 +8,49 @@
     <div>
       <a class="username" href="{{ url_for('social.profile', username=content.author.username) }}">@{{ content.author.username }}</a>
       <span class="muted">{{ content.created_at.strftime("%Y-%m-%d %H:%M") }}</span>
+      {% if content.is_poll %}
+        <span class="poll-badge">Poll</span>
+      {% endif %}
     </div>
   </header>
   {% if content.body %}
     <p class="post-body">{{ content.body }}</p>
+  {% endif %}
+  {% if content.is_poll and poll %}
+    <section class="poll" aria-label="Poll">
+      {% if poll.show_results %}
+        <ul class="poll-results">
+          {% for option in poll.options %}
+            <li class="poll-result">
+              <div class="poll-result-header">
+                <span class="poll-result-label">{{ option.label }}</span>
+                <span class="poll-result-meta">{{ option.vote_count }} votes ({{ option.percentage }}%)</span>
+              </div>
+              <div class="poll-result-track" role="presentation">
+                <div class="poll-result-bar" style="width: {{ option.percentage }}%;"></div>
+              </div>
+              {% if poll.user_vote_option_id == option.id %}
+                <span class="poll-your-vote">Your vote</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="muted poll-total">{{ poll.total_votes }} total vote{{ '' if poll.total_votes == 1 else 's' }}</p>
+      {% else %}
+        <form method="post" action="{{ url_for('social.vote_poll', post_id=content.id) }}" class="poll-vote-form">
+          <fieldset>
+            <legend class="visually-hidden">Vote in poll</legend>
+            {% for option in poll.options %}
+              <label class="poll-choice">
+                <input type="radio" name="poll_option_id" value="{{ option.id }}" required>
+                <span>{{ option.label }}</span>
+              </label>
+            {% endfor %}
+          </fieldset>
+          <button type="submit">Vote</button>
+        </form>
+      {% endif %}
+    </section>
   {% endif %}
   {% if content.media_filename %}
     {% if content.media_type == "image" %}

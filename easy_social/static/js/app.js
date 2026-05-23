@@ -80,7 +80,39 @@
     });
   }
 
+  function setupPollComposer(composer) {
+    const toggle = composer.querySelector("[data-poll-toggle]");
+    const pollOptions = composer.querySelector("[data-poll-options]");
+    const mediaPicker = composer.querySelector("[data-media-picker]");
+    const mediaInput = composer.querySelector("[data-media-input]");
+
+    if (!toggle || !pollOptions) {
+      return;
+    }
+
+    function syncPollMode() {
+      const enabled = toggle.checked;
+      pollOptions.hidden = !enabled;
+      if (mediaPicker) {
+        mediaPicker.hidden = enabled;
+      }
+      if (mediaInput) {
+        mediaInput.disabled = enabled;
+        if (enabled) {
+          mediaInput.value = "";
+          mediaInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    }
+
+    toggle.addEventListener("change", syncPollMode);
+    syncPollMode();
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll("form.composer").forEach(setupComposer);
+    document.querySelectorAll("form.composer").forEach(function (composer) {
+      setupComposer(composer);
+      setupPollComposer(composer);
+    });
   });
 })();
