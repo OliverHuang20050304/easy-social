@@ -72,6 +72,7 @@ class Post(db.Model):
     body = db.Column(db.Text, nullable=False, default="")
     media_filename = db.Column(db.String(255), nullable=True)
     media_type = db.Column(db.String(20), nullable=True)
+    is_poll = db.Column(db.Boolean, nullable=False, default=False, index=True)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -86,10 +87,23 @@ class Post(db.Model):
         "Comment", back_populates="post", cascade="all, delete-orphan", lazy="dynamic"
     )
     repost_of = db.relationship("Post", remote_side=[id], backref="reposts")
+    poll_options = db.relationship(
+        "PollOption",
+        back_populates="post",
+        cascade="all, delete-orphan",
+        order_by="PollOption.position",
+    )
+    poll_votes = db.relationship(
+        "PollVote",
+        back_populates="post",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "(length(body) > 0) OR (media_filename IS NOT NULL) OR (repost_of_id IS NOT NULL)",
+            "(length(body) > 0) OR (media_filename IS NOT NULL) "
+            "OR (repost_of_id IS NOT NULL) OR (is_poll = 1)",
             name="ck_post_has_content",
         ),
     )
@@ -101,6 +115,50 @@ class Post(db.Model):
     @property
     def is_repost(self) -> bool:
         return self.repost_of_id is not None
+
+
+class PollOption(db.Model):
+    __tablename__ = "poll_option"
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=False, index=True)
+    label = db.Column(db.String(200), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+
+    post = db.relationship("Post", back_populates="poll_options")
+    votes = db.relationship(
+        "PollVote",
+        back_populates="poll_option",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+    )
+
+    __table_args__ = (
+        CheckConstraint("length(label) > 0", name="ck_poll_option_label_not_empty"),
+        UniqueConstraint("post_id", "position", name="uq_poll_option_position"),
+    )
+
+
+class PollVote(db.Model):
+    __tablename__ = "poll_vote"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=False, index=True)
+    poll_option_id = db.Column(
+        db.Integer, db.ForeignKey("poll_option.id"), nullable=False, index=True
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    user = db.relationship("User", backref=db.backref("poll_votes", lazy="dynamic"))
+    post = db.relationship("Post", back_populates="poll_votes")
+    poll_option = db.relationship("PollOption", back_populates="votes")
+
+    __table_args__ = (UniqueConstraint("user_id", "post_id", name="uq_poll_vote_one_per_user"),)
 
 
 def _utc_now_naive() -> datetime:
